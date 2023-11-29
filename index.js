@@ -40,18 +40,14 @@ export const handler = async (event, context) => {
       await file.save(fileBuffer, { contentType: 'text/plain' });      
       console.log('File uploaded to GCS');
 
-      //const gcpPath = `${bucket}/${uniqueFileName}`
-
-      // const authenticatedUrl = `https://storage.cloud.google.com/${bucket}/dharmathanishqnimmala%40gmail.com/file.zip`
-
-
-  await sendEmailAndTrack(emailFetch, uniqueFileName,bucketname, true);
+      const gcs_bucket_path = `${bucketname}/${uniqueFileName}`
+  await sendEmailAndTrack(emailFetch, gcs_bucket_path, true);
   console.log('Email sent and tracked in DynamoDB');
       // return uploadResult;
       // return uploadGoogle;
     } else {
       console.error('Failed to fetch data from the URL:', response.status);
-      await sendEmailAndTrack(emailFetch, 'Unavailable',bucketname, false, response.status);
+      await sendEmailAndTrack(emailFetch, urlToFetch, false);
       // Handle error cases or retry logic
     }
   } catch (error) {
@@ -60,19 +56,17 @@ export const handler = async (event, context) => {
   }
 };
 
-async function sendEmailAndTrack(email, filePath, bucketName, isSuccess, errorMessage = null) {
+async function sendEmailAndTrack(email, url, isSuccess) {
   const mailgun = new Mailgun(FormData);
   const mg = mailgun.client({ username: 'api', key: mailgunkey });
 
   let emailSubject = isSuccess ? 'Successful Submission' : 'Failed Submission';
-  let emailText = isSuccess ? `File ${bucketName}/${filePath} Uploaded Successfully` : `Submission Failed for File path: ${bucketName}/${filePath}`;
+  let emailText = isSuccess ? `File ${url} Uploaded Successfully` : `Submission Failed, Please check the submission URL and upload valid url)`;
 
-  if (!isSuccess) {
-    emailText += `\nReason: ${errorMessage}`;
-  }
+
 
   await mg.messages.create(domain, {
-    from: "postmaster@mynscc.me",
+    from: "dharma@mynscc.me",
     to: [email],
     subject: emailSubject,
     text: emailText
