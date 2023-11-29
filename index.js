@@ -31,31 +31,60 @@ export const handler = async (event, context) => {
       const fileData = await response.arrayBuffer();
       const fileBuffer = Buffer.from(new Uint8Array(fileData));
 
+      // Generating a unique file name using email and timestamp
+      const timestamp = new Date().getTime(); // Get current timestamp
+      const uniqueFileName = `${emailFetch}/${timestamp}_file.zip`;
       //gcp bucket
       const bucket = googleStorage.bucket(bucketname)
-      const file = bucket.file(`${emailFetch}/file.zip`)
+      const file = bucket.file(uniqueFileName)
       await file.save(fileBuffer, { contentType: 'text/plain' });      
       console.log('File uploaded to GCS');
-      const mailgun = new Mailgun(FormData);
-      const mg = mailgun.client({username: 'api', key: mailgunkey});
 
-      await mg.messages.create(domain, {
-        from: "postmaster@mynscc.me",
-        to: [emailFetch],
-        subject: "Hello",
-        text: `File ${urlToFetch} Uploaded Successfully`,
-        html: "<h1>The file has been successfully uploaded to S3.</h1>"
-      })
-      .then(msg => console.log(msg)) // logs response data
-  .catch(err => console.log(err)); // logs any error
+      //const gcpPath = `${bucket}/${uniqueFileName}`
 
-  // Store email information in DynamoDB
+      // const authenticatedUrl = `https://storage.cloud.google.com/${bucket}/dharmathanishqnimmala%40gmail.com/file.zip`
+
+
+  await sendEmailAndTrack(emailFetch, uniqueFileName,bucketname, true);
+  console.log('Email sent and tracked in DynamoDB');
+      // return uploadResult;
+      // return uploadGoogle;
+    } else {
+      console.error('Failed to fetch data from the URL:', response.status);
+      await sendEmailAndTrack(emailFetch, 'Unavailable',bucketname, false, response.status);
+      // Handle error cases or retry logic
+    }
+  } catch (error) {
+    console.error('Error fetching file:', error.message);
+    return { statusCode: 500, body: 'Error fetching file' };
+  }
+};
+
+async function sendEmailAndTrack(email, filePath, bucketName, isSuccess, errorMessage = null) {
+  const mailgun = new Mailgun(FormData);
+  const mg = mailgun.client({ username: 'api', key: mailgunkey });
+
+  let emailSubject = isSuccess ? 'Successful Submission' : 'Failed Submission';
+  let emailText = isSuccess ? `File ${bucketName}/${filePath} Uploaded Successfully` : `Submission Failed for File path: ${bucketName}/${filePath}`;
+
+  if (!isSuccess) {
+    emailText += `\nReason: ${errorMessage}`;
+  }
+
+  await mg.messages.create(domain, {
+    from: "postmaster@mynscc.me",
+    to: [email],
+    subject: emailSubject,
+    text: emailText
+  });
+
+  // Store email information in DynamoDB for tracking
   const emailInfo = {
-    TableName: dynamodb_table, // Replace with your DynamoDB table name
+    TableName: dynamodb_table,
     Item: {
-      emailId: emailFetch, // Unique identifier for the email
-      timestamp: new Date().toISOString(), // Timestamp of when the email was sent
-      status: 'sent', // Initial status of the email
+      UserEmail: email,
+      Timestamp: new Date().toISOString(),
+      status: isSuccess ? 'success' : 'failure'
     },
   };
 
@@ -67,19 +96,5 @@ export const handler = async (event, context) => {
     }
   }).promise();
 
-  console.log('Email sent and tracked in DynamoDB');
-      // return uploadResult;
-      // return uploadGoogle;
-    } else {
-      console.error('Failed to fetch data from the URL:', response.status);
-      // Handle error cases or retry logic
-    }
-  } catch (error) {
-    console.error('Error fetching file:', error.message);
-    return { statusCode: 500, body: 'Error fetching file' };
-  }
-};
-
-
-
-
+  console.log(`${emailSubject} email sent and tracked in DynamoDB`);
+}
